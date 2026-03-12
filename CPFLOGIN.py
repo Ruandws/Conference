@@ -1,20 +1,46 @@
 import pandas as pd
 from playwright.sync_api import sync_playwright
 import os
+import tkinter as tk
+from tkinter import simpledialog, messagebox
 
 # CAMINHO BASEADO NO SEU LOG DE ERRO (OneDrive)
-CAMINHO_PLANILHA = r"C:\Users\andrade.ruan\Downloads\planilha1.xlsx"
+CAMINHO_PLANILHA = r"C:\Automacoes\planilha1.xlsx"
 # Alterado para salvar na mesma pasta onde seu script está rodando (Área de Trabalho via OneDrive)
-CAMINHO_SAIDA = r"C:\Users\andrade.ruan\OneDrive - EBSERH\Área de Trabalho\PROJETO\planilha2.xlsx"
+CAMINHO_SAIDA = r"C:\Automacoes\resultados\planilha2.xlsx"
 
 URL_LOGIN = "https://servicosti.ebserh.gov.br/#/login"
-USUARIO = "adm.rvandrade"
-SENHA = "Mississipi1321c"
+
+def obter_credenciais():
+    """Cria uma interface simples para capturar usuário e senha."""
+    root = tk.Tk()
+    root.withdraw() # Esconde a janela principal pequena do tkinter
+
+    # Janelas de input
+    usuario = simpledialog.askstring("Login", "Digite seu usuário", parent=root)
+    senha = simpledialog.askstring("Login", "Digite sua senha:", show='*', parent=root)
+
+    root.destroy()
+    return usuario, senha
 
 def executar():
+    # 1. Obter credenciais antes de começar tudo
+    usuario, senha = obter_credenciais()
+
+    #Tratamento de exceção - Caso não fornecidas as credencias, a execução encerra.
+    if not usuario or not senha:
+        print("Execução cancelada: Usuário ou senha não fornecidos.")
+        return
+
     print("Lendo planilha...")
+
+    #Tratamento de exceção - Verifica se o caminho da planilha está correto
+    if not os.path.exists(CAMINHO_PLANILHA):
+        print(f"Erro: Planilha não encontrada em {CAMINHO_PLANILHA}")
+        return
+
+    ##Lógica da leitura
     df = pd.read_excel(CAMINHO_PLANILHA, dtype=str)
-    
     coluna_dados = "CPF" 
     resultados = []
 
@@ -25,8 +51,8 @@ def executar():
 
         # Login
         page.goto(URL_LOGIN)
-        page.fill("input[ng-model='email']", USUARIO)
-        page.fill("input[type='password']", SENHA)
+        page.fill("input[ng-model='email']", usuario)
+        page.fill("input[type='password']", senha)
         page.click("button.btn-success")
 
         # Navegação
@@ -64,9 +90,13 @@ def executar():
     
     # Cria a pasta caso ela não exista (prevenção de erro)
     os.makedirs(os.path.dirname(CAMINHO_SAIDA), exist_ok=True)
-    
     df_saida.to_excel(CAMINHO_SAIDA, index=False)
-    print("Sucesso!")
+
+    # Aviso visual de conclusão
+    final_root = tk.Tk()
+    final_root.withdraw()
+    messagebox.showinfo("Sucesso", f"Automação finalizada!\nSalvo em: {CAMINHO_SAIDA}")
+    final_root.destroy()
 
 if __name__ == "__main__":
     executar()
