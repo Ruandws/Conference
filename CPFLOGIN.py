@@ -51,7 +51,7 @@ class AutomacaoApp:
 
         # Validação de campos vazios
         if not usuario or not senha:
-            messagebox.showwarning("Atenção", "Por favor, preencha usuário e senha!")
+        messagebox.showwarning("Atenção", "Por favor, preencha usuário e senha!")
             return
 
         # Validação de visualização: Se ambas estiverem falsas, avisa e NÃO fecha a aplicação
