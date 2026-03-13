@@ -2,77 +2,104 @@ import pandas as pd
 from playwright.sync_api import sync_playwright
 import os
 import tkinter as tk
-from tkinter import simpledialog, messagebox
+from tkinter import filedialog, messagebox
 import tkinter.font as tkFont
-
-# CAMINHO BASEADO NO SEU LOG DE ERRO (OneDrive)
-CAMINHO_PLANILHA = r"C:\Automacoes\planilha1.xlsx"
-# Alterado para salvar na mesma pasta onde seu script está rodando (Área de Trabalho via OneDrive)
-CAMINHO_SAIDA = r"C:\Automacoes\resultados\planilha2.xlsx"
 
 URL_LOGIN = "https://servicosti.ebserh.gov.br/#/login"
 
-def obter_credenciais():
-    """Cria uma janela para capturar usuário e senha."""
-    credenciais = {}
+def painel_inicial():
+    """Janela única para caminhos e credenciais com um único botão para iniciar a automação."""
+    dados = {}
 
-    # Janela principal
     root = tk.Tk()
-    root.title("Login")
-    root.geometry("300x150")
+    root.title("Automação EBSERH")
+    root.geometry("500x360")
     root.resizable(False, False)
-    root.eval('tk::PlaceWindow . center')  # centraliza a janela na tela
-    root.configure(bg="#2596be")  # fundo pret
+    root.eval('tk::PlaceWindow . center')
+    root.configure(bg="#2596be")
 
-    # Campo Usuário
-    tk.Label(root, text="Usuário:").pack(pady=(10, 0))
-    usuario_entry = tk.Entry(root)
-    usuario_entry.pack(pady=5)
-    usuario_entry.focus()
+    # --- Container Superior: Caminhos ---
+    frame_caminhos = tk.Frame(root, bg="#2596be")
+    frame_caminhos.pack(fill="x", padx=20, pady=(10,5))
 
-    # Campo Senha
-    tk.Label(root, text="Senha:").pack()
-    senha_entry = tk.Entry(root, show="*")
-    senha_entry.pack(pady=5)
+    tk.Label(frame_caminhos, text="Planilha de Entrada (.xlsx):", bg="#2596be", fg="white").pack(anchor="w")
+    entrada_var = tk.StringVar()
+    entrada_entry = tk.Entry(frame_caminhos, textvariable=entrada_var, width=50)
+    entrada_entry.pack(pady=3)
 
-    # Fonte base do botão 
+    def escolher_entrada():
+        arquivo = filedialog.askopenfilename(filetypes=[("Arquivos Excel", "*.xlsx")])
+        if arquivo:
+            entrada_var.set(arquivo)
+
+    tk.Button(frame_caminhos, text="Selecionar Entrada", command=escolher_entrada, bg="#000000", fg="white").pack(pady=3)
+
+    tk.Label(frame_caminhos, text="Arquivo de Saída (.xlsx):", bg="#2596be", fg="white").pack(anchor="w", pady=(10,0))
+    saida_var = tk.StringVar()
+    saida_entry = tk.Entry(frame_caminhos, textvariable=saida_var, width=50)
+    saida_entry.pack(pady=3)
+
+    def escolher_saida():
+        arquivo = filedialog.asksaveasfilename(defaultextension=".xlsx",
+                                               filetypes=[("Arquivos Excel", "*.xlsx")])
+        if arquivo:
+            saida_var.set(arquivo)
+
+    tk.Button(frame_caminhos, text="Selecionar Saída", command=escolher_saida, bg="#000000", fg="white").pack(pady=3)
+
+    # --- Container Inferior: Credenciais ---
+    frame_cred = tk.Frame(root, bg="#2596be")
+    frame_cred.pack(fill="x", padx=20, pady=(10,10))
+
+    tk.Label(frame_cred, text="Usuário:", bg="#2596be", fg="white").pack(anchor="w", pady=(5,0))
+    usuario_entry = tk.Entry(frame_cred)
+    usuario_entry.pack(pady=3)
+
+    tk.Label(frame_cred, text="Senha:", bg="#2596be", fg="white").pack(anchor="w", pady=(5,0))
+    senha_entry = tk.Entry(frame_cred, show="*")
+    senha_entry.pack(pady=3)
+
+    # Fonte do botão
     fonte_base = tkFont.nametofont("TkDefaultFont")
     tamanho_novo = int(fonte_base.cget("size") * 1.8)
     fonte_botao = (fonte_base.cget("family"), tamanho_novo, "bold")
 
-    # Função do botão
-    def enviar():
-        credenciais['usuario'] = usuario_entry.get().strip()
-        credenciais['senha'] = senha_entry.get().strip()
-        root.destroy()  # fecha a janela
+    # Botão único para iniciar automação
+    def iniciar_automacao():
+        if not entrada_var.get() or not saida_var.get():
+            messagebox.showwarning("Aviso", "Selecione os caminhos de entrada e saída!")
+            return
+        if not usuario_entry.get() or not senha_entry.get():
+            messagebox.showwarning("Aviso", "Preencha usuário e senha!")
+            return
 
-    # Botão de envio
-    tk.Button(root, text="Entrar", command=enviar).pack(pady=10)
+        dados['entrada'] = entrada_var.get()
+        dados['saida'] = saida_var.get()
+        dados['usuario'] = usuario_entry.get().strip()
+        dados['senha'] = senha_entry.get().strip()
+        root.destroy()
 
-    # Espera o usuário enviar antes de continuar
+    tk.Button(root, text="Iniciar Automação", command=iniciar_automacao, bg="#000000", fg="white", font=fonte_botao).pack(pady=15)
+
     root.mainloop()
+    return dados.get('entrada'), dados.get('saida'), dados.get('usuario'), dados.get('senha')
 
-    return credenciais.get('usuario'), credenciais.get('senha')
 
 def executar():
-    # 1. Obter credenciais antes de começar tudo
-    usuario, senha = obter_credenciais()
+    # Obter todos os dados da janela única
+    CAMINHO_PLANILHA, CAMINHO_SAIDA, usuario, senha = painel_inicial()
 
-    #Tratamento de exceção - Caso não fornecidas as credencias, a execução encerra.
-    if not usuario or not senha:
-        print("Execução cancelada: Usuário ou senha não fornecidos.")
+    if not CAMINHO_PLANILHA or not CAMINHO_SAIDA or not usuario or not senha:
+        print("Execução cancelada: Dados incompletos.")
         return
 
     print("Lendo planilha...")
-
-    #Tratamento de exceção - Verifica se o caminho da planilha está correto
     if not os.path.exists(CAMINHO_PLANILHA):
         print(f"Erro: Planilha não encontrada em {CAMINHO_PLANILHA}")
         return
 
-    ##Lógica da leitura
     df = pd.read_excel(CAMINHO_PLANILHA, dtype=str)
-    coluna_dados = "CPF" 
+    coluna_dados = "CPF"
     resultados = []
 
     with sync_playwright() as p:
@@ -95,8 +122,8 @@ def executar():
         for index, row in df.iterrows():
             cpf_bruto = str(row[coluna_dados]).strip()
             cpf_limpo = "".join(filter(str.isdigit, cpf_bruto))
-
-            if not cpf_limpo: continue
+            if not cpf_limpo:
+                continue
 
             print(f"[{index+1}] Consultando: {cpf_limpo}")
             campo_pesquisa = page.locator("input.form-control").first
@@ -115,19 +142,17 @@ def executar():
 
         browser.close()
 
-    # SALVAMENTO FINAL
-    print(f"Salvando em: {CAMINHO_SAIDA}")
-    df_saida = pd.DataFrame(resultados)
-    
-    # Cria a pasta caso ela não exista (prevenção de erro)
+    # Salvar resultado
     os.makedirs(os.path.dirname(CAMINHO_SAIDA), exist_ok=True)
+    df_saida = pd.DataFrame(resultados)
     df_saida.to_excel(CAMINHO_SAIDA, index=False)
 
-    # Aviso visual de conclusão
+    # Aviso final
     final_root = tk.Tk()
     final_root.withdraw()
     messagebox.showinfo("Sucesso", f"Automação finalizada!\nSalvo em: {CAMINHO_SAIDA}")
     final_root.destroy()
+
 
 if __name__ == "__main__":
     executar()

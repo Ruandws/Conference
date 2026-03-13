@@ -52,7 +52,6 @@ class PreparadorPlanilhaApp:
         self.btn_processar.pack(pady=35, padx=50, fill="x")
 
     def criar_campo_selecao(self, texto, tipo):
-        """Helper para criar os campos de input com botão de busca (...)"""
         frame = tk.Frame(self.root)
         frame.pack(fill="x", padx=25, pady=5)
         tk.Label(frame, text=texto, font=("Arial", 9)).pack(anchor="w")
@@ -80,64 +79,75 @@ class PreparadorPlanilhaApp:
         v_path = self.path_v.get()
         destino_pasta = self.path_destino.get()
 
-        # Validação básica
         if not v_path or not destino_pasta:
             messagebox.showwarning("Atenção", "Preencha a origem e o destino!")
             return
 
         try:
-            # 1. Carregar os dados
+            # 1. Carregar planilha
             df_v = pd.read_excel(v_path)
-            
-            # Normalizar nomes das colunas (remove espaços e ignora maiúsculas/minúsculas)
-            # Isso faz com que "Nome Completo" e "nome completo" funcionem igual.
-            df_v.columns = df_v.columns.str.strip()
 
-            # 2. Mapeamento de Colunas (Origem V -> Destino P)
+            # Normalizar nomes das colunas
+            df_v.columns = df_v.columns.str.strip().str.lower()
+
+            # 2. Mapeamento
             mapeamento = {
-                "Nome Completo": "Nome", 
-                "Login": "Login",
-                "CPF": "CPF",
-                "E-mail alternativo": "E-mail alternativo"
+                "Nome": ["nome completo"],
+                "Login": ["login"],
+                "CPF": ["cpf"],
+                "E-mail alternativo": ["e-mail alternativo", "e-mail", "email"]
             }
-            
+
             df_p = pd.DataFrame()
 
-            # Transferir dados da V para a P seguindo o mapeamento
-            for col_origem, col_destino in mapeamento.items():
-                if col_origem in df_v.columns:
-                    df_p[col_destino] = df_v[col_origem]
+            for destino, origens in mapeamento.items():
+                for origem in origens:
+                    if origem in df_v.columns:
+                        df_p[destino] = df_v[origem]
+                        break
                 else:
-                    df_p[col_destino] = "" # Cria coluna vazia se não achar na V
+                    print(f"Nenhuma coluna encontrada para: {destino}")
 
-            # 3. Inserir dados fixos preenchidos no Painel
+            # 3. Inserir dados fixos
             for nome_col, entry in self.campos_fixos.items():
                 df_p[nome_col] = entry.get()
 
-            # 4. Organizar Ordem das Colunas conforme solicitado
+            # Garantir CPF com 11 dígitos
+            df_p["CPF"] = (
+                df_p["CPF"]
+                .astype(str)
+                .str.replace(".0", "", regex=False)
+                .str.zfill(11)
+            )
+
+            # 4. Ordem final
             ordem_final = [
-                "Tipo", "Escritório", "Nome", "Login", "CPF", 
+                "Tipo", "Escritório", "Nome", "Login", "CPF",
                 "E-mail alternativo", "Empresa", "Cargo", "Gerente", "Data Expiração"
             ]
-            
-            # Garantir que todas as colunas da ordem final existam
+
             for col in ordem_final:
                 if col not in df_p.columns:
                     df_p[col] = ""
 
             df_p = df_p[ordem_final]
 
-            # 5. Salvar o arquivo final
-            timestamp = datetime.now().strftime("%d-%m-%Y_%H%M")
-            nome_arquivo = f"Planilha_P_Processada_{timestamp}.xlsx"
+            # 5. Exportar CSV (Excel Brasil)
+            nome_arquivo = "Import.csv"
             caminho_completo = os.path.join(destino_pasta, nome_arquivo)
-            
-            df_p.to_excel(caminho_completo, index=False)
-            
-            messagebox.showinfo("Sucesso!", f"Planilha P gerada com sucesso!\n\nArquivo: {nome_arquivo}")
+
+            df_p.to_csv(
+                caminho_completo,
+                index=False,
+                sep=";",
+                encoding="utf-8-sig"
+            )
+
+            messagebox.showinfo("Sucesso!", f"Planilha gerada com sucesso!\n\nArquivo: {nome_arquivo}")
 
         except Exception as e:
             messagebox.showerror("Erro de Processamento", f"Ocorreu um erro: {e}")
+
 
 if __name__ == "__main__":
     root = tk.Tk()
