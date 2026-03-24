@@ -17,7 +17,7 @@ class PreparadorPlanilhaApp:
         self.path_v = self.criar_campo_selecao(
             "1. Selecione a Planilha de Origem (V):", 
             tipo="arquivo"
-        )
+    )
         
         # Campo para selecionar a pasta onde a P será criada
         self.path_destino = self.criar_campo_selecao(

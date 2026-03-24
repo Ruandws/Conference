@@ -1,12 +1,41 @@
 import pandas as pd
 from playwright.sync_api import sync_playwright
 import os
+import re
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import tkinter.font as tkFont
 
 URL_LOGIN = "https://servicosti.ebserh.gov.br/#/login"
 
+##Funções Auxiliares
+def tratar_cpf(valor):
+
+    if pd.isna(valor):
+        return None
+
+    cpf_original = str(valor).strip()
+
+    # remove apóstrofo
+    cpf_original = cpf_original.replace("'", "")
+
+    # remove tudo que não for número
+    cpf = re.sub(r"\D", "", cpf_original)
+
+    if cpf == "":
+        return None
+
+    if len(cpf) < 11:
+        cpf = cpf.zfill(11)
+        return cpf
+
+    if len(cpf) > 11:
+        return None
+
+    return cpf
+
+
+##Interface
 def painel_inicial():
     """Janela única para caminhos e credenciais com um único botão para iniciar a automação."""
     dados = {}
@@ -21,8 +50,8 @@ def painel_inicial():
     # --- Container Superior: Caminhos ---
     frame_caminhos = tk.Frame(root, bg="#2596be")
     frame_caminhos.pack(fill="x", padx=20, pady=(10,5))
-
     tk.Label(frame_caminhos, text="Planilha de Entrada (.xlsx):", bg="#2596be", fg="white").pack(anchor="w")
+    
     entrada_var = tk.StringVar()
     entrada_entry = tk.Entry(frame_caminhos, textvariable=entrada_var, width=50)
     entrada_entry.pack(pady=3)
@@ -85,8 +114,8 @@ def painel_inicial():
     return dados.get('entrada'), dados.get('saida'), dados.get('usuario'), dados.get('senha')
 
 
+##Execução
 def executar():
-    # Obter todos os dados da janela única
     CAMINHO_PLANILHA, CAMINHO_SAIDA, usuario, senha = painel_inicial()
 
     if not CAMINHO_PLANILHA or not CAMINHO_SAIDA or not usuario or not senha:
@@ -94,13 +123,19 @@ def executar():
         return
 
     print("Lendo planilha...")
+
     if not os.path.exists(CAMINHO_PLANILHA):
         print(f"Erro: Planilha não encontrada em {CAMINHO_PLANILHA}")
         return
 
     df = pd.read_excel(CAMINHO_PLANILHA, dtype=str)
+
     coluna_dados = "CPF"
     resultados = []
+
+    # NORMALIZA TODOS OS CPFs UMA VEZ
+    df["CPF_normalizado"] = df[coluna_dados].apply(tratar_cpf)
+    df["CPF_normalizado"] = df["CPF_normalizado"].astype("string")
 
     with sync_playwright() as p:
         print("Iniciando Navegador...")
@@ -118,17 +153,28 @@ def executar():
         page.wait_for_selector(selector_menu, state="visible")
         page.locator(selector_menu).click()
 
+        # CACHE DOS LOCATORS
+        campo_pesquisa = page.locator("input.form-control").first
+        botao_pesquisa = page.locator("button.btn-primary")
+
         print("Iniciando consultas...")
+
         for index, row in df.iterrows():
-            cpf_bruto = str(row[coluna_dados]).strip()
-            cpf_limpo = "".join(filter(str.isdigit, cpf_bruto))
-            if not cpf_limpo:
+            cpf_original = row["CPF"]
+            cpf_limpo = row["CPF_normalizado"]
+
+            if pd.isna(cpf_limpo) or cpf_limpo is None:
+                resultados.append({
+                    "CPF_original": cpf_original,
+                    "CPF_tratado": None,
+                    "login": None
+                })
                 continue
 
             print(f"[{index+1}] Consultando: {cpf_limpo}")
-            campo_pesquisa = page.locator("input.form-control").first
-            campo_pesquisa.fill(cpf_limpo)
-            page.locator("button.btn-primary").click()
+
+            campo_pesquisa.fill(str(cpf_limpo))
+            botao_pesquisa.click()
 
             try:
                 page.wait_for_selector("tr[ng-repeat*='usuario']", timeout=3000)
@@ -136,21 +182,26 @@ def executar():
             except:
                 login = "Não encontrado"
 
-            resultados.append({"CPF": cpf_limpo, "login": login})
+            resultados.append({
+                "CPF_original": cpf_original,
+                "CPF_tratado": cpf_limpo,
+                "login": login
+            })
+
             campo_pesquisa.fill("")
             page.wait_for_timeout(300)
 
         browser.close()
 
-    # Salvar resultado
     os.makedirs(os.path.dirname(CAMINHO_SAIDA), exist_ok=True)
     df_saida = pd.DataFrame(resultados)
     df_saida.to_excel(CAMINHO_SAIDA, index=False)
 
-    # Aviso final
     final_root = tk.Tk()
     final_root.withdraw()
+
     messagebox.showinfo("Sucesso", f"Automação finalizada!\nSalvo em: {CAMINHO_SAIDA}")
+
     final_root.destroy()
 
 
